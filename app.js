@@ -49,6 +49,9 @@ const testGrid = document.querySelector("#test-grid");
 const progressLabel = document.querySelector("#progress-label");
 const progressBar = document.querySelector("#progress-bar");
 const resultsSection = document.querySelector("#results");
+const sheetSubmitForm = document.querySelector("#sheet-submit-form");
+const sheetSubmitButton = document.querySelector("#sheet-submit-button");
+const sheetSubmitStatus = document.querySelector("#sheet-submit-status");
 
 function readState() {
   try {
@@ -140,9 +143,22 @@ function loadProfile() {
   });
 }
 
+function validateProfile() {
+  const phoneField = profileForm.elements.namedItem("phone");
+  const phone = phoneField.value.trim();
+  const digits = phone.replace(/\D/g, "").length;
+  const validPhone = /^[+0-9() .-]{7,20}$/.test(phone) && digits >= 7 && digits <= 15;
+  phoneField.setCustomValidity(validPhone ? "" : "กรุณากรอกเบอร์โทรศัพท์ 7–15 หลัก");
+  return profileForm.reportValidity();
+}
+
+profileForm.elements.namedItem("phone").addEventListener("input", (event) => {
+  event.currentTarget.setCustomValidity("");
+});
+
 profileForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  if (!profileForm.reportValidity()) return;
+  if (!validateProfile()) return;
   const formData = new FormData(profileForm);
   state.profile = Object.fromEntries(formData.entries());
   saveState();
@@ -210,6 +226,11 @@ function renderAdvice() {
 }
 
 function showResults() {
+  if (!validateProfile()) {
+    window.alert("กรุณากรอกข้อมูลส่วนตัว เบอร์โทรศัพท์ และอีเมลให้ครบก่อนดูสรุปผล");
+    profileForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
   if (!state.profile) {
     window.alert("กรุณาบันทึกข้อมูลผู้เข้ารับการทดสอบก่อนดูสรุปผล");
     profileForm.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -233,6 +254,92 @@ function showResults() {
 document.querySelector("#results-button").addEventListener("click", showResults);
 document.querySelector("#print-button").addEventListener("click", () => window.print());
 document.querySelector("#edit-results").addEventListener("click", () => document.querySelector("#tests").scrollIntoView({ behavior: "smooth" }));
+
+function getSheetsEndpoint() {
+  const configuredUrl = window.APP_CONFIG?.googleSheetsUrl;
+  if (!configuredUrl) return null;
+
+  try {
+    const endpoint = new URL(configuredUrl);
+    if (
+      endpoint.protocol !== "https:" ||
+      endpoint.hostname !== "script.google.com" ||
+      !/^\/macros\/s\/[^/]+\/exec$/.test(endpoint.pathname)
+    ) {
+      return null;
+    }
+    return endpoint.href;
+  } catch {
+    return null;
+  }
+}
+
+function buildSheetPayload() {
+  const profile = Object.fromEntries(new FormData(profileForm).entries());
+  return {
+    profile: {
+      name: profile.name.trim(),
+      gender: profile.gender,
+      age: Number(profile.age),
+      weight: Number(profile.weight),
+      height: Number(profile.height),
+      phone: profile.phone.trim(),
+      email: profile.email.trim(),
+    },
+    results: Object.fromEntries(tests.map((test) => {
+      const result = state.results[test.id];
+      return [test.id, {
+        measure: result.measure === "" || result.measure == null ? null : Number(result.measure),
+        level: Number(result.level),
+      }];
+    })),
+  };
+}
+
+async function submitToSheet() {
+  if (!validateProfile()) {
+    profileForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+
+  const endpoint = getSheetsEndpoint();
+  if (!endpoint) {
+    sheetSubmitStatus.dataset.state = "error";
+    sheetSubmitStatus.textContent = "ยังไม่ได้ตั้งค่า Google Apps Script URL กรุณาตั้งค่า config.js ตามคู่มือก่อนส่งข้อมูล";
+    return;
+  }
+
+  sheetSubmitButton.disabled = true;
+  sheetSubmitStatus.dataset.state = "";
+  sheetSubmitStatus.textContent = "กำลังบันทึกข้อมูล...";
+
+  try {
+    await fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify(buildSheetPayload()),
+    });
+    sheetSubmitStatus.dataset.state = "sent";
+    sheetSubmitStatus.textContent = "ส่งคำขอแล้ว แต่เบราว์เซอร์ยืนยันผลจาก Google Sheet ไม่ได้ กรุณาตรวจสอบชีตก่อนส่งซ้ำ";
+  } catch (error) {
+    console.error("Could not send assessment to Google Sheets.", error);
+    sheetSubmitStatus.dataset.state = "error";
+    sheetSubmitStatus.textContent = "ส่งข้อมูลไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง";
+  } finally {
+    sheetSubmitButton.disabled = false;
+  }
+}
+
+sheetSubmitForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!sheetSubmitForm.reportValidity()) {
+    sheetSubmitStatus.dataset.state = "error";
+    sheetSubmitStatus.textContent = "กรุณายืนยันความยินยอมก่อนส่งข้อมูล";
+    return;
+  }
+  submitToSheet();
+});
 
 loadProfile();
 renderTests();

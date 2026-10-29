@@ -57,7 +57,7 @@
             <div class="eyebrow"><span>01 — YOUR PROFILE</span></div>
             <h2>เริ่มจากรู้จัก<span class="highlight">ตัวเอง</span></h2>
           </div>
-          <p class="section-side-note">ข้อมูลของคุณจะถูกบันทึกไว้<br />บนอุปกรณ์นี้เท่านั้น</p>
+          <p class="section-side-note">ข้อมูลจะเก็บบนอุปกรณ์นี้ก่อน<br />และส่งเข้า Google Sheet เมื่อยินยอม</p>
         </div>
         <form class="profile-card" id="profile-form">
           <div class="profile-card-top">
@@ -91,9 +91,18 @@
               <span>ส่วนสูง <b>*</b></span>
               <span class="input-unit"><input name="height" type="number" min="50" max="250" step="0.1" placeholder="เช่น 165" required /><em>ซม.</em></span>
             </label>
+            <label class="field">
+              <span>เบอร์โทรศัพท์ <b>*</b></span>
+              <input name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="เช่น 0812345678" required maxlength="20" aria-describedby="phone-help" />
+              <small id="phone-help" class="field-help">ใส่ตัวเลขอย่างน้อย 7 หลัก ใช้ + เว้นวรรค หรือขีดคั่นได้</small>
+            </label>
+            <label class="field field-email">
+              <span>อีเมล <b>*</b></span>
+              <input name="email" type="email" autocomplete="email" placeholder="name@example.com" required maxlength="254" />
+            </label>
           </div>
           <div class="profile-card-bottom">
-            <span class="privacy-note"><span aria-hidden="true">▣</span> ข้อมูลส่วนตัวไม่ถูกส่งออกจากเครื่อง</span>
+            <span class="privacy-note"><span aria-hidden="true">▣</span> ข้อมูลบันทึกในอุปกรณ์นี้ก่อนส่งเข้า Google Sheet</span>
             <button class="button button-primary" type="submit">บันทึกข้อมูล <span aria-hidden="true">↗</span></button>
           </div>
         </form>
@@ -131,12 +140,27 @@
             <div class="safety-note"><span aria-hidden="true">✳</span><p>เริ่มจากระดับที่ทำไหว วอร์มอัปก่อนทุกครั้ง และหยุดทันทีหากมีอาการเจ็บหรือเวียนศีรษะ</p></div>
           </article>
         </div>
+        <form class="sheet-submit-panel" id="sheet-submit-form">
+          <div class="sheet-submit-copy">
+            <h3>บันทึกผลลง Google Sheet</h3>
+            <p>ข้อมูลติดต่อและผลทดสอบจะถูกส่งไปยังชีตของผู้จัดแบบประเมิน เพื่อใช้บันทึกผล กรุณายินยอมก่อนส่ง</p>
+          </div>
+          <label class="consent-row">
+            <input id="sheet-consent" type="checkbox" required />
+            <span>ฉันยินยอมให้ส่งข้อมูลติดต่อและผลการทดสอบไปจัดเก็บใน Google Sheet ตามที่ระบุไว้</span>
+          </label>
+          <div class="sheet-submit-actions">
+            <p id="sheet-submit-status" class="sheet-submit-status" role="status" aria-live="polite"></p>
+            <button id="sheet-submit-button" class="button button-primary" type="submit">ยินยอมและส่งผล <span aria-hidden="true">↗</span></button>
+          </div>
+        </form>
         <div class="result-bottom"><span id="result-profile"></span><button class="text-link" id="edit-results" type="button">กลับไปแก้ไขผล <span aria-hidden="true">↑</span></button></div>
       </section>
     </main>
 
     <footer><a class="brand footer-brand" href="#"><span class="brand-mark" aria-hidden="true">ร</span><span>แรงดี<span class="brand-dot">.</span></span></a><span>เคลื่อนไหวอย่างเข้าใจ แข็งแรงในแบบของคุณ</span><span>BUILT FOR YOUR WELL-BEING · 2025</span></footer>
 
+    <script src="config.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
