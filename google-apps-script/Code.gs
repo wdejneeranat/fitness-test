@@ -5,6 +5,7 @@ const CONFIG = {
 
 const HEADERS = [
   "Timestamp",
+  "Record ID",
   "Name",
   "Gender",
   "Age",
@@ -20,6 +21,9 @@ const HEADERS = [
   "Board Jump Level",
   "Dead Hang (sec)",
   "Dead Hang Level",
+  "Profile Saved At",
+  "Results Saved At",
+  "Consent Given At",
 ];
 
 function doPost(event) {
@@ -28,7 +32,26 @@ function doPost(event) {
   try {
     const body = event && event.postData ? event.postData.contents : "";
     const payload = JSON.parse(body || "");
-    const row = createRow(payload);
+    const stage = payload.stage || "legacy";
+    const recordId = stage === "legacy"
+      ? Utilities.getUuid()
+      : requiredRecordId(payload.recordId);
+    let fields;
+    if (stage === "profile") {
+      requireConsent(payload);
+      fields = createProfileFields(payload, recordId);
+    } else if (stage === "results") {
+      fields = createResultFields(payload);
+    } else if (stage === "legacy") {
+      requireConsent(payload);
+      fields = Object.assign(
+        createProfileFields(payload, recordId),
+        createResultFields(payload)
+      );
+    } else {
+      throw new Error("Submission stage is invalid.");
+    }
+
     lock = LockService.getScriptLock();
     lock.waitLock(10000);
 
@@ -37,9 +60,33 @@ function doPost(event) {
       throw new Error("The configured sheet tab was not found.");
     }
     const headers = ensureHeaders(sheet);
-    sheet.appendRow(headers.map(function (header) {
-      return Object.prototype.hasOwnProperty.call(row, header) ? row[header] : "";
-    }));
+    if (stage === "legacy") {
+      sheet.appendRow(createRowValues(headers, fields));
+      return createResponse({ ok: true });
+    }
+
+    const rowNumber = findRecordRow(sheet, headers, recordId);
+
+    if (stage === "profile") {
+      if (rowNumber) {
+        updateRow(sheet, headers, rowNumber, fields);
+      } else {
+        sheet.appendRow(createRowValues(headers, fields));
+      }
+    } else if (payload.stage === "results") {
+      if (!rowNumber) {
+        throw new Error("The profile row must be saved before its test results.");
+      }
+      requireConsent(payload);
+      const consentColumn = headers.indexOf("Consent Given At") + 1;
+      if (
+        consentColumn === 0
+        || !sheet.getRange(rowNumber, consentColumn).getValue()
+      ) {
+        throw new Error("The profile row has no recorded consent.");
+      }
+      updateRow(sheet, headers, rowNumber, fields);
+    }
 
     return createResponse({ ok: true });
   } catch (error) {
@@ -52,9 +99,15 @@ function doPost(event) {
   }
 }
 
-function createRow(payload) {
-  if (!payload || !payload.profile || !payload.results) {
-    throw new Error("Submission is missing profile or test results.");
+function requireConsent(payload) {
+  if (payload.consented !== true) {
+    throw new Error("Submission requires recorded consent.");
+  }
+}
+
+function createProfileFields(payload, recordId) {
+  if (!payload.profile) {
+    throw new Error("Submission is missing the profile.");
   }
 
   const profile = payload.profile;
@@ -73,13 +126,10 @@ function createRow(payload) {
     throw new Error("Email address is invalid.");
   }
 
-  const reach = requiredResult(payload.results.reach);
-  const sitStand = requiredResult(payload.results["sit-stand"]);
-  const boardJump = requiredResult(payload.results["board-jump"]);
-  const deadHang = requiredResult(payload.results["dead-hang"]);
-
+  const timestamp = new Date();
   return {
-    Timestamp: new Date(),
+    Timestamp: timestamp,
+    "Record ID": recordId,
     Name: safeCell(name),
     Gender: safeCell(gender),
     Age: age,
@@ -87,6 +137,22 @@ function createRow(payload) {
     "Height (cm)": height,
     Phone: safeCell(phone),
     Email: safeCell(email),
+    "Profile Saved At": timestamp,
+    "Consent Given At": timestamp,
+  };
+}
+
+function createResultFields(payload) {
+  if (!payload.results) {
+    throw new Error("Submission is missing the test results.");
+  }
+
+  const reach = requiredResult(payload.results.reach);
+  const sitStand = requiredResult(payload.results["sit-stand"]);
+  const boardJump = requiredResult(payload.results["board-jump"]);
+  const deadHang = requiredResult(payload.results["dead-hang"]);
+
+  return {
     "Function Reach (cm)": reach.measure,
     "Function Reach Level": reach.level,
     "30 Sec Sit To Stand (reps)": sitStand.measure,
@@ -95,7 +161,15 @@ function createRow(payload) {
     "Board Jump Level": boardJump.level,
     "Dead Hang (sec)": deadHang.measure,
     "Dead Hang Level": deadHang.level,
+    "Results Saved At": new Date(),
   };
+}
+
+function requiredRecordId(value) {
+  if (typeof value !== "string" || !/^[a-zA-Z0-9-]{16,80}$/.test(value)) {
+    throw new Error("Record ID is invalid.");
+  }
+  return value;
 }
 
 function ensureHeaders(sheet) {
@@ -117,6 +191,34 @@ function ensureHeaders(sheet) {
       .setValues([headers.slice(lastColumn)]);
   }
   return headers;
+}
+
+function findRecordRow(sheet, headers, recordId) {
+  const column = headers.indexOf("Record ID") + 1;
+  const lastRow = sheet.getLastRow();
+  if (column === 0 || lastRow < 2) return 0;
+
+  const recordIds = sheet.getRange(2, column, lastRow - 1, 1).getDisplayValues();
+  const index = recordIds.findIndex(function (row) {
+    return row[0] === recordId;
+  });
+  return index < 0 ? 0 : index + 2;
+}
+
+function createRowValues(headers, fields) {
+  return headers.map(function (header) {
+    return Object.prototype.hasOwnProperty.call(fields, header) ? fields[header] : "";
+  });
+}
+
+function updateRow(sheet, headers, rowNumber, fields) {
+  const existing = sheet.getRange(rowNumber, 1, 1, headers.length).getValues()[0];
+  headers.forEach(function (header, index) {
+    if (Object.prototype.hasOwnProperty.call(fields, header)) {
+      existing[index] = fields[header];
+    }
+  });
+  sheet.getRange(rowNumber, 1, 1, headers.length).setValues([existing]);
 }
 
 function requiredResult(result) {

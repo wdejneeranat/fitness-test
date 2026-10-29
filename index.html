@@ -57,7 +57,7 @@
             <div class="eyebrow"><span>01 — YOUR PROFILE</span></div>
             <h2>เริ่มจากรู้จัก<span class="highlight">ตัวเอง</span></h2>
           </div>
-          <p class="section-side-note">ข้อมูลจะเก็บบนอุปกรณ์นี้ก่อน<br />และส่งเข้า Google Sheet เมื่อยินยอม</p>
+          <p class="section-side-note">บันทึกข้อมูลผู้เข้ารับการทดสอบ<br />ลง Google Sheet เมื่อกดยืนยัน</p>
         </div>
         <form class="profile-card" id="profile-form">
           <div class="profile-card-top">
@@ -102,8 +102,14 @@
             </label>
           </div>
           <div class="profile-card-bottom">
-            <span class="privacy-note"><span aria-hidden="true">▣</span> ข้อมูลบันทึกในอุปกรณ์นี้ก่อนส่งเข้า Google Sheet</span>
-            <button class="button button-primary" type="submit">บันทึกข้อมูล <span aria-hidden="true">↗</span></button>
+            <div class="profile-save-copy">
+              <label class="profile-consent">
+                <input name="consented" type="checkbox" required />
+                <span>ยินยอมให้บันทึกข้อมูลติดต่อและผลทดสอบลง Google Sheet: ข้อมูลส่วนตัวจะส่งเมื่อกดบันทึกข้อมูล และผลทดสอบจะส่งเมื่อกดดูสรุปผล</span>
+              </label>
+              <p id="profile-sheet-status" class="sheet-submit-status" role="status" aria-live="polite"></p>
+            </div>
+            <button id="profile-save-button" class="button button-primary" type="submit">บันทึกข้อมูล <span aria-hidden="true">↗</span></button>
           </div>
         </form>
       </section>
@@ -140,21 +146,7 @@
             <div class="safety-note"><span aria-hidden="true">✳</span><p>เริ่มจากระดับที่ทำไหว วอร์มอัปก่อนทุกครั้ง และหยุดทันทีหากมีอาการเจ็บหรือเวียนศีรษะ</p></div>
           </article>
         </div>
-        <form class="sheet-submit-panel" id="sheet-submit-form">
-          <div class="sheet-submit-copy">
-            <h3>บันทึกผลลง Google Sheet</h3>
-            <p>ข้อมูลติดต่อและผลทดสอบจะถูกส่งไปยังชีตของผู้จัดแบบประเมิน เพื่อใช้บันทึกผล กรุณายินยอมก่อนส่ง</p>
-          </div>
-          <label class="consent-row">
-            <input id="sheet-consent" type="checkbox" required />
-            <span>ฉันยินยอมให้ส่งข้อมูลติดต่อและผลการทดสอบไปจัดเก็บใน Google Sheet ตามที่ระบุไว้</span>
-          </label>
-          <div class="sheet-submit-actions">
-            <p id="sheet-submit-status" class="sheet-submit-status" role="status" aria-live="polite"></p>
-            <button id="sheet-submit-button" class="button button-primary" type="submit">ยินยอมและส่งผล <span aria-hidden="true">↗</span></button>
-          </div>
-        </form>
-        <div class="result-bottom"><span id="result-profile"></span><button class="text-link" id="edit-results" type="button">กลับไปแก้ไขผล <span aria-hidden="true">↑</span></button></div>
+        <div class="result-bottom"><div><span id="result-profile"></span><p id="results-sheet-status" class="sheet-submit-status" role="status" aria-live="polite"></p></div><button class="text-link" id="edit-results" type="button">กลับไปแก้ไขผล <span aria-hidden="true">↑</span></button></div>
       </section>
     </main>
 

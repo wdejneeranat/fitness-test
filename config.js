@@ -1,3 +1,3 @@
 window.APP_CONFIG = {
-  googleSheetsUrl: "https://script.google.com/macros/s/AKfycbxXQzzESG80WQnRn1wEwMUv-6uRgUC2b3vzZdqJuIvtWPkFIAbDkopeYFaeAYQMwdlm/exec",
+  googleSheetsUrl: "https://script.google.com/macros/s/AKfycbxPhvKC6_2X_O7c7JupnsfiNza-oHCMOG8DYVYnzuOIhyHsbVPO1ayEauGWB1zNgUWV/exec",
 };

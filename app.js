@@ -49,9 +49,10 @@ const testGrid = document.querySelector("#test-grid");
 const progressLabel = document.querySelector("#progress-label");
 const progressBar = document.querySelector("#progress-bar");
 const resultsSection = document.querySelector("#results");
-const sheetSubmitForm = document.querySelector("#sheet-submit-form");
-const sheetSubmitButton = document.querySelector("#sheet-submit-button");
-const sheetSubmitStatus = document.querySelector("#sheet-submit-status");
+const profileSaveButton = document.querySelector("#profile-save-button");
+const profileSheetStatus = document.querySelector("#profile-sheet-status");
+const resultsSheetStatus = document.querySelector("#results-sheet-status");
+const resultsButton = document.querySelector("#results-button");
 
 function readState() {
   try {
@@ -138,9 +139,11 @@ function updateProgress() {
 function loadProfile() {
   if (!state.profile) return;
   Object.entries(state.profile).forEach(([name, value]) => {
+    if (name === "recordId" || name === "consented") return;
     const field = profileForm.elements.namedItem(name);
     if (field) field.value = value;
   });
+  profileForm.elements.namedItem("consented").checked = Boolean(state.profile.consented);
 }
 
 function validateProfile() {
@@ -156,12 +159,34 @@ profileForm.elements.namedItem("phone").addEventListener("input", (event) => {
   event.currentTarget.setCustomValidity("");
 });
 
-profileForm.addEventListener("submit", (event) => {
+function createRecordId() {
+  return globalThis.crypto?.randomUUID?.()
+    || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getProfileFormValues() {
+  const values = Object.fromEntries(new FormData(profileForm).entries());
+  delete values.consented;
+  return values;
+}
+
+function hasUnsavedProfileChanges() {
+  if (!state.profile) return true;
+  const currentProfile = getProfileFormValues();
+  return ["name", "gender", "age", "weight", "height", "phone", "email"]
+    .some((field) => String(state.profile[field] ?? "") !== String(currentProfile[field] ?? ""));
+}
+
+profileForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!validateProfile()) return;
-  const formData = new FormData(profileForm);
-  state.profile = Object.fromEntries(formData.entries());
+  state.profile = {
+    ...getProfileFormValues(),
+    recordId: state.profile?.recordId || createRecordId(),
+    consented: true,
+  };
   saveState();
+  await submitToSheet("profile");
   document.querySelector("#tests").scrollIntoView({ behavior: "smooth" });
 });
 
@@ -237,6 +262,11 @@ function showResults() {
     profileForm.elements.namedItem("name").focus({ preventScroll: true });
     return;
   }
+  if (hasUnsavedProfileChanges()) {
+    window.alert("มีการแก้ไขข้อมูลส่วนตัว กรุณากดบันทึกข้อมูลก่อนดูสรุปผล");
+    profileForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
   if (tests.some((test) => !state.results[test.id]?.level)) {
     const firstIncomplete = tests.find((test) => !state.results[test.id]?.level);
     window.alert("กรุณาเลือกระดับผลทดสอบให้ครบทั้ง 4 ฐานก่อนดูสรุปผล");
@@ -249,9 +279,10 @@ function showResults() {
     `${state.profile.name} · อายุ ${state.profile.age} ปี · ${state.profile.weight} กก. · ${state.profile.height} ซม.`;
   resultsSection.hidden = false;
   resultsSection.scrollIntoView({ behavior: "smooth" });
+  void submitToSheet("results");
 }
 
-document.querySelector("#results-button").addEventListener("click", showResults);
+resultsButton.addEventListener("click", showResults);
 document.querySelector("#print-button").addEventListener("click", () => window.print());
 document.querySelector("#edit-results").addEventListener("click", () => document.querySelector("#tests").scrollIntoView({ behavior: "smooth" }));
 
@@ -274,10 +305,13 @@ function getSheetsEndpoint() {
   }
 }
 
-function buildSheetPayload() {
-  const profile = Object.fromEntries(new FormData(profileForm).entries());
+function buildSheetPayload(stage) {
+  const profile = state.profile;
   return {
-    profile: {
+    stage,
+    recordId: profile.recordId,
+    consented: Boolean(profile.consented),
+    ...(stage === "profile" ? { profile: {
       name: profile.name.trim(),
       gender: profile.gender,
       age: Number(profile.age),
@@ -285,61 +319,50 @@ function buildSheetPayload() {
       height: Number(profile.height),
       phone: profile.phone.trim(),
       email: profile.email.trim(),
-    },
-    results: Object.fromEntries(tests.map((test) => {
+    } } : {}),
+    ...(stage === "results" ? { results: Object.fromEntries(tests.map((test) => {
       const result = state.results[test.id];
       return [test.id, {
         measure: result.measure === "" || result.measure == null ? null : Number(result.measure),
         level: Number(result.level),
       }];
-    })),
+    })) } : {}),
   };
 }
 
-async function submitToSheet() {
-  if (!validateProfile()) {
-    profileForm.scrollIntoView({ behavior: "smooth", block: "center" });
-    return;
-  }
-
+async function submitToSheet(stage) {
+  const status = stage === "profile" ? profileSheetStatus : resultsSheetStatus;
+  const button = stage === "profile" ? profileSaveButton : resultsButton;
   const endpoint = getSheetsEndpoint();
   if (!endpoint) {
-    sheetSubmitStatus.dataset.state = "error";
-    sheetSubmitStatus.textContent = "ยังไม่ได้ตั้งค่า Google Apps Script URL กรุณาตั้งค่า config.js ตามคู่มือก่อนส่งข้อมูล";
+    status.dataset.state = "error";
+    status.textContent = "ยังไม่ได้ตั้งค่า Google Apps Script URL กรุณาตั้งค่า config.js ก่อนส่งข้อมูล";
     return;
   }
 
-  sheetSubmitButton.disabled = true;
-  sheetSubmitStatus.dataset.state = "";
-  sheetSubmitStatus.textContent = "กำลังบันทึกข้อมูล...";
+  button.disabled = true;
+  status.dataset.state = "";
+  status.textContent = "กำลังบันทึกข้อมูล...";
 
   try {
     await fetch(endpoint, {
       method: "POST",
       mode: "no-cors",
       headers: { "Content-Type": "text/plain;charset=UTF-8" },
-      body: JSON.stringify(buildSheetPayload()),
+      body: JSON.stringify(buildSheetPayload(stage)),
     });
-    sheetSubmitStatus.dataset.state = "sent";
-    sheetSubmitStatus.textContent = "ส่งคำขอแล้ว แต่เบราว์เซอร์ยืนยันผลจาก Google Sheet ไม่ได้ กรุณาตรวจสอบชีตก่อนส่งซ้ำ";
+    status.dataset.state = "sent";
+    status.textContent = stage === "profile"
+      ? "ส่งคำขอบันทึกข้อมูลแล้ว แต่เบราว์เซอร์ยืนยันผลจาก Google Sheet ไม่ได้"
+      : "ส่งคำขอบันทึกผลทดสอบแล้ว แต่เบราว์เซอร์ยืนยันผลจาก Google Sheet ไม่ได้";
   } catch (error) {
     console.error("Could not send assessment to Google Sheets.", error);
-    sheetSubmitStatus.dataset.state = "error";
-    sheetSubmitStatus.textContent = "ส่งข้อมูลไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง";
+    status.dataset.state = "error";
+    status.textContent = "ส่งข้อมูลไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง";
   } finally {
-    sheetSubmitButton.disabled = false;
+    button.disabled = false;
   }
 }
-
-sheetSubmitForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!sheetSubmitForm.reportValidity()) {
-    sheetSubmitStatus.dataset.state = "error";
-    sheetSubmitStatus.textContent = "กรุณายืนยันความยินยอมก่อนส่งข้อมูล";
-    return;
-  }
-  submitToSheet();
-});
 
 loadProfile();
 renderTests();
