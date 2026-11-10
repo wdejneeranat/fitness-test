@@ -1,6 +1,7 @@
 const CONFIG = {
   spreadsheetId: "10v-weiEiAkpQte9R1AoNs-YgYaf_FupvWMuRh3qRsb0",
   sheetId: 0,
+  driveFolderName: "verve_event",
 };
 
 const HEADERS = [
@@ -107,6 +108,14 @@ function requireConsent(payload) {
   if (payload.consented !== true) {
     throw new Error("Submission requires recorded consent.");
   }
+}
+
+function authorizeAssessmentPermissions() {
+  MailApp.getRemainingDailyQuota();
+  HtmlService.createHtmlOutput("PDF permission check")
+    .getBlob()
+    .getAs(MimeType.PDF);
+  getOrCreateAssessmentFolder();
 }
 
 function createProfileFields(payload, recordId) {
@@ -318,17 +327,35 @@ function sendAssessmentEmail(sheet, headers, rowNumber, payload) {
     + "th{background:#edf2e5;text-align:left}th,td{padding:8px;border:1px solid #dfe5dc;vertical-align:top}"
     + "li{margin:0 0 8px}.disclaimer{margin-top:22px;color:#7a6841;font-weight:bold}"
     + "</style></head><body>" + htmlBody + "</body></html>";
-  const attachment = HtmlService.createHtmlOutput(pdfHtml)
+  const fileName = "Fitness-Assessment-" + sanitizeFileName(name)
+    + "-" + valueFor("Record ID") + ".pdf";
+  const pdfBlob = HtmlService.createHtmlOutput(pdfHtml)
     .getBlob()
     .getAs(MimeType.PDF)
-    .setName("fitness-assessment.pdf");
+    .setName(fileName);
+  const driveFile = getOrCreateAssessmentFolder().createFile(pdfBlob);
   MailApp.sendEmail({
     to: email,
     subject: subject,
-    body: textBody + "\n\nแนบไฟล์รายงานผลประเมินฉบับ PDF แล้ว",
+    body: textBody + "\n\nบันทึกไฟล์ PDF ไว้ใน Google Drive โฟลเดอร์ "
+      + CONFIG.driveFolderName + " และแนบไฟล์รายงานมาพร้อมอีเมลนี้แล้ว",
     htmlBody: htmlBody,
-    attachments: [attachment],
+    attachments: [driveFile.getBlob()],
   });
+}
+
+function getOrCreateAssessmentFolder() {
+  const folders = DriveApp.getFoldersByName(CONFIG.driveFolderName);
+  return folders.hasNext() ? folders.next() : DriveApp.createFolder(CONFIG.driveFolderName);
+}
+
+function sanitizeFileName(value) {
+  const sanitized = String(value)
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return sanitized || "participant";
 }
 
 function getEmailAction(ruleId) {

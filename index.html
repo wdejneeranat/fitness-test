@@ -106,7 +106,7 @@
             <div class="profile-save-copy">
               <label class="profile-consent">
                 <input name="consented" type="checkbox" required />
-                <span>ยินยอมให้บันทึกข้อมูลติดต่อและผลทดสอบลง Google Sheet และส่งผลประเมินไปยังอีเมลที่ให้ไว้: ข้อมูลส่วนตัวจะส่งเมื่อกดบันทึกข้อมูล ส่วนผลทดสอบและอีเมลจะส่งเมื่อกดพิมพ์ผลประเมิน</span>
+                <span>ยินยอมให้บันทึกข้อมูลติดต่อและผลทดสอบลง Google Sheet สร้างไฟล์ PDF ใน Google Drive และส่งผลประเมินไปยังอีเมลที่ให้ไว้: ข้อมูลส่วนตัวจะส่งเมื่อกดบันทึกข้อมูล ส่วนผลทดสอบจะส่งเมื่อกดสร้าง PDF</span>
               </label>
               <p id="profile-sheet-status" class="sheet-submit-status" role="status" aria-live="polite"></p>
             </div>
@@ -133,7 +133,7 @@
             <div class="eyebrow"><span>03 — YOUR RESULTS</span></div>
             <h2>ความแข็งแรง<span class="highlight">ของคุณ</span></h2>
           </div>
-          <button class="button button-outline" id="print-button" type="button"><span aria-hidden="true">▤</span> บันทึกผลประเมินเป็น PDF และส่งอีเมล</button>
+          <button class="button button-outline" id="print-button" type="button"><span aria-hidden="true">▤</span> สร้าง PDF เก็บใน Drive และส่งอีเมล</button>
         </div>
         <div class="results-grid">
           <article class="result-card chart-card">
@@ -147,7 +147,7 @@
             <div class="safety-note"><span aria-hidden="true">✳</span><p>เป็นค่าที่สำหรับการทดสอบอย่างง่ายเท่านั้น ไม่ใช่ค่าในการวินิจฉัย · วอร์มอัปก่อนทุกครั้ง และหยุดทันทีหากมีอาการเจ็บหรือเวียนศีรษะ</p></div>
           </article>
         </div>
-        <div class="result-bottom"><div><span id="result-profile"></span><p class="pdf-help">เลือก “บันทึกเป็น PDF” ในหน้าต่างพิมพ์ ระบบจะส่งรายงาน PDF แนบไปยังอีเมลที่ลงทะเบียน</p><p id="results-sheet-status" class="sheet-submit-status" role="status" aria-live="polite"></p></div><button class="text-link" id="edit-results" type="button">กลับไปแก้ไขผล <span aria-hidden="true">↑</span></button></div>
+        <div class="result-bottom"><div><span id="result-profile"></span><p class="pdf-help">ระบบจะสร้าง PDF เก็บในโฟลเดอร์ Google Drive “verve_event” และส่งไฟล์แนบไปยังอีเมลที่ลงทะเบียน</p><p id="results-sheet-status" class="sheet-submit-status" role="status" aria-live="polite"></p></div><button class="text-link" id="edit-results" type="button">กลับไปแก้ไขผล <span aria-hidden="true">↑</span></button></div>
       </section>
     </main>
 

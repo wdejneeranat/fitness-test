@@ -457,10 +457,9 @@ function showResults() {
 }
 
 resultsButton.addEventListener("click", showResults);
-const printButton = document.querySelector("#print-button");
-printButton.addEventListener("click", () => {
+const pdfSubmitButton = document.querySelector("#print-button");
+pdfSubmitButton.addEventListener("click", () => {
   void submitToSheet("results");
-  window.print();
 });
 document.querySelector("#edit-results").addEventListener("click", () => document.querySelector("#tests").scrollIntoView({ behavior: "smooth" }));
 
@@ -510,7 +509,7 @@ function buildSheetPayload(stage) {
 
 async function submitToSheet(stage) {
   const status = stage === "profile" ? profileSheetStatus : resultsSheetStatus;
-  const button = stage === "profile" ? profileSaveButton : printButton;
+  const button = stage === "profile" ? profileSaveButton : pdfSubmitButton;
   const endpoint = getSheetsEndpoint();
   if (!endpoint) {
     status.dataset.state = "error";
@@ -520,7 +519,9 @@ async function submitToSheet(stage) {
 
   button.disabled = true;
   status.dataset.state = "";
-  status.textContent = stage === "profile" ? "กำลังบันทึกข้อมูล..." : "กำลังบันทึกผลและส่งไฟล์ PDF ทางอีเมล...";
+  status.textContent = stage === "profile"
+    ? "กำลังบันทึกข้อมูล..."
+    : "กำลังสร้าง PDF บันทึกลง Google Drive และส่งอีเมล...";
 
   try {
     await fetch(endpoint, {
@@ -532,7 +533,7 @@ async function submitToSheet(stage) {
     status.dataset.state = "sent";
     status.textContent = stage === "profile"
       ? "ส่งคำขอบันทึกข้อมูลแล้ว แต่เบราว์เซอร์ยืนยันผลจาก Google Sheet ไม่ได้"
-      : `ส่งคำขอบันทึกผลและไฟล์ PDF ไปยัง ${state.profile.email} แล้ว แต่เบราว์เซอร์ยืนยันการส่งไม่ได้ กรุณาตรวจสอบอีเมลขาเข้า`;
+      : `ส่งคำขอบันทึกผล สร้างไฟล์ PDF ใน Drive และส่งอีเมลไปยัง ${state.profile.email} แล้ว แต่เบราว์เซอร์ยืนยันผลไม่ได้ กรุณาตรวจสอบอีเมลและโฟลเดอร์ Drive`;
   } catch (error) {
     console.error("Could not send assessment to Google Sheets.", error);
     status.dataset.state = "error";
