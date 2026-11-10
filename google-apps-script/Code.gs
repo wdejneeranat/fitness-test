@@ -311,7 +311,24 @@ function sendAssessmentEmail(sheet, headers, rowNumber, payload) {
     + escapeHtml(action.summary) + "</p><ul>" + action.recommendations.map(function (item) {
       return "<li>" + escapeHtml(item) + "</li>";
     }).join("") + "</ul><p style=\"color:#7a6841\">เป็นค่าที่สำหรับการทดสอบอย่างง่ายเท่านั้น ไม่ใช่ค่าในการวินิจฉัย</p></div>";
-  MailApp.sendEmail({ to: email, subject: subject, body: textBody, htmlBody: htmlBody });
+  const pdfHtml = "<!doctype html><html><head><meta charset=\"UTF-8\"><style>"
+    + "body{font:12px Arial,sans-serif;color:#173c34;line-height:1.55;margin:28px}"
+    + "h2{font-size:20px}h3{font-size:15px;margin-top:22px}"
+    + "table{width:100%;border-collapse:collapse;margin:14px 0}"
+    + "th{background:#edf2e5;text-align:left}th,td{padding:8px;border:1px solid #dfe5dc;vertical-align:top}"
+    + "li{margin:0 0 8px}.disclaimer{margin-top:22px;color:#7a6841;font-weight:bold}"
+    + "</style></head><body>" + htmlBody + "</body></html>";
+  const attachment = HtmlService.createHtmlOutput(pdfHtml)
+    .getBlob()
+    .getAs(MimeType.PDF)
+    .setName("fitness-assessment.pdf");
+  MailApp.sendEmail({
+    to: email,
+    subject: subject,
+    body: textBody + "\n\nแนบไฟล์รายงานผลประเมินฉบับ PDF แล้ว",
+    htmlBody: htmlBody,
+    attachments: [attachment],
+  });
 }
 
 function getEmailAction(ruleId) {

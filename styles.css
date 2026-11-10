@@ -154,6 +154,7 @@ h1, h2, h3, p { margin-top: 0; }
 .safety-note p { margin: 0; font-size: 9px; line-height: 1.7; }
 .result-bottom { display: flex; justify-content: space-between; margin-top: 17px; color: #89928a; font-size: 10px; }
 .result-bottom .text-link { font-size: 10px; }
+.pdf-help { margin: 5px 0 0; color: #78827b; font-size: 10px; line-height: 1.6; }
 .sheet-submit-status { margin: 0; color: #78827b; font-size: 10px; line-height: 1.6; }
 .sheet-submit-status[data-state="sent"] { color: #8a743b; }
 .sheet-submit-status[data-state="error"] { color: #b94e47; }
@@ -178,5 +179,6 @@ footer { display: flex; max-width: 1180px; min-height: 80px; align-items: center
   footer { flex-wrap: wrap; gap: 10px; padding: 17px 16px; }footer > span:last-child { width: 100%; }
 }
 @media print {
-  body { background: white; }.topbar, .hero, .profile-section, .tests-section, footer, .results-section > .section-heading .button, .result-bottom .text-link { display: none !important; }.results-section[hidden] { display: block !important; }.results-section { display: block !important; max-width: none; padding: 0; }.section-heading { margin-bottom: 10px; }.results-grid { grid-template-columns: 1fr 1fr; }.result-card { break-inside: avoid; box-shadow: none; }
+  @page { size: A4; margin: 14mm; }
+  body { background: white; }.topbar, .hero, .profile-section, .tests-section, footer, .results-section > .section-heading .button, .result-bottom .text-link, .pdf-help, #results-sheet-status { display: none !important; }.results-section[hidden] { display: block !important; }.results-section { display: block !important; max-width: none; padding: 0; }.section-heading { margin-bottom: 10px; }.results-grid { grid-template-columns: 1fr 1fr; }.result-card { break-inside: avoid; box-shadow: none; }
 }

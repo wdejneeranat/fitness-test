@@ -520,7 +520,7 @@ async function submitToSheet(stage) {
 
   button.disabled = true;
   status.dataset.state = "";
-  status.textContent = stage === "profile" ? "กำลังบันทึกข้อมูล..." : "กำลังบันทึกผลและส่งอีเมล...";
+  status.textContent = stage === "profile" ? "กำลังบันทึกข้อมูล..." : "กำลังบันทึกผลและส่งไฟล์ PDF ทางอีเมล...";
 
   try {
     await fetch(endpoint, {
@@ -532,7 +532,7 @@ async function submitToSheet(stage) {
     status.dataset.state = "sent";
     status.textContent = stage === "profile"
       ? "ส่งคำขอบันทึกข้อมูลแล้ว แต่เบราว์เซอร์ยืนยันผลจาก Google Sheet ไม่ได้"
-      : `ส่งคำขอบันทึกผลและส่งอีเมลไปยัง ${state.profile.email} แล้ว แต่เบราว์เซอร์ยืนยันผลการส่งไม่ได้`;
+      : `ส่งคำขอบันทึกผลและไฟล์ PDF ไปยัง ${state.profile.email} แล้ว แต่เบราว์เซอร์ยืนยันการส่งไม่ได้ กรุณาตรวจสอบอีเมลขาเข้า`;
   } catch (error) {
     console.error("Could not send assessment to Google Sheets.", error);
     status.dataset.state = "error";
