@@ -1,7 +1,8 @@
 const CONFIG = {
-  spreadsheetId: "10v-weiEiAkpQte9R1AoNs-YgYaf_FupvWMuRh3qRsb0",
+  spreadsheetId: "1_km-l77IVk5IuCMVsFxIfa-56opsh8elOtNkEVFTrhw",
   sheetId: 0,
-  driveFolderName: "verve_event",
+  drySlopeFolderId: "1jyCtZ4mWK3pf6fpLv1tfwkXvICksb3Xm",
+  fitnessFolderId: "1J0dOJnkD6HwMsSIVOfFL9LwecUYPkoep",
 };
 
 const HEADERS = [
@@ -28,6 +29,8 @@ const HEADERS = [
   "Profile Saved At",
   "Results Saved At",
   "Consent Given At",
+  "Dry Slope Agreement Accepted At",
+  "Dry Slope Agreement Version",
 ];
 
 function doPost(event) {
@@ -44,6 +47,15 @@ function doPost(event) {
     if (stage === "profile") {
       requireConsent(payload);
       fields = createProfileFields(payload, recordId);
+    } else if (stage === "agreement") {
+      requireConsent(payload);
+      if (payload.agreementAccepted !== true) {
+        throw new Error("The Dry Slope agreement must be accepted.");
+      }
+      fields = Object.assign(
+        createProfileFields(payload, recordId),
+        createAgreementFields()
+      );
     } else if (stage === "results") {
       fields = createResultFields(payload);
     } else if (stage === "legacy") {
@@ -71,11 +83,15 @@ function doPost(event) {
 
     const rowNumber = findRecordRow(sheet, headers, recordId);
 
-    if (stage === "profile") {
+    if (stage === "profile" || stage === "agreement") {
       if (rowNumber) {
         updateRow(sheet, headers, rowNumber, fields);
       } else {
         sheet.appendRow(createRowValues(headers, fields));
+      }
+      if (stage === "agreement") {
+        const agreementPdf = createDrySlopeAgreementPdf(payload.profile, recordId);
+        sendDrySlopeAgreementEmail(payload.profile, agreementPdf);
       }
     } else if (payload.stage === "results") {
       if (!rowNumber) {
@@ -110,12 +126,20 @@ function requireConsent(payload) {
   }
 }
 
+function createAgreementFields() {
+  return {
+    "Dry Slope Agreement Accepted At": new Date(),
+    "Dry Slope Agreement Version": "2026-11-11",
+  };
+}
+
 function authorizeAssessmentPermissions() {
   MailApp.getRemainingDailyQuota();
   HtmlService.createHtmlOutput("PDF permission check")
     .getBlob()
     .getAs(MimeType.PDF);
-  getOrCreateAssessmentFolder();
+  getDrySlopeFolder();
+  getFitnessFolder();
 }
 
 function createProfileFields(payload, recordId) {
@@ -301,52 +325,234 @@ function sendAssessmentEmail(sheet, headers, rowNumber, payload) {
     "",
     "เป็นค่าที่สำหรับการทดสอบอย่างง่ายเท่านั้น ไม่ใช่ค่าในการวินิจฉัย",
   ].join("\n");
-  const htmlResults = results.map(function (result) {
-    return "<tr><td style=\"padding:8px;border:1px solid #dfe5dc\">" + escapeHtml(result.name)
-      + "</td><td style=\"padding:8px;border:1px solid #dfe5dc\">" + escapeHtml(result.measure)
-      + "</td><td style=\"padding:8px;border:1px solid #dfe5dc\">" + escapeHtml(result.grade) + "</td></tr>";
+  const htmlBreakdown = results.map(function (result, index) {
+    return "<tr><td class=\"score\">" + (Number(valueFor(entries[index].level)) || "—") + "</td><td>"
+      + "<strong>" + escapeHtml(result.name) + " · " + escapeHtml(result.measure) + "</strong>"
+      + "<div class=\"grade\">" + escapeHtml(result.grade) + "</div>"
+      + "<div><b>สมรรถภาพหลัก:</b> " + escapeHtml(result.capacity) + "</div>"
+      + "<div><b>ผลต่ำอาจสะท้อน:</b> " + escapeHtml(result.lowMayReflect) + "</div>"
+      + "<div><b>เป้าหมายการฝึก:</b> " + escapeHtml(result.trainingGoal) + "</div></td></tr>";
   }).join("");
-  const htmlInterpretations = results.map(function (result) {
-    return "<li><strong>" + escapeHtml(result.name) + "</strong><br>สมรรถภาพหลัก: "
-      + escapeHtml(result.capacity) + "<br>ผลต่ำอาจสะท้อน: " + escapeHtml(result.lowMayReflect)
-      + "<br>เป้าหมายการฝึก: " + escapeHtml(result.trainingGoal) + "</li>";
+  const actionItems = action.recommendations.map(function (item) {
+    return "<li>" + escapeHtml(item) + "</li>";
   }).join("");
-  const htmlBody = "<div style=\"font:14px Arial,sans-serif;color:#173c34;line-height:1.6\">"
-    + "<h2>ผลประเมินสมรรถภาพเบื้องต้น</h2><p>สวัสดี " + escapeHtml(name) + "</p>"
-    + "<table style=\"border-collapse:collapse\"><thead><tr><th style=\"padding:8px;border:1px solid #dfe5dc\">ฐานทดสอบ</th>"
-    + "<th style=\"padding:8px;border:1px solid #dfe5dc\">ค่าที่วัด</th><th style=\"padding:8px;border:1px solid #dfe5dc\">ผลแปลสี</th></tr></thead><tbody>"
-    + htmlResults + "</tbody></table><h3>สิ่งที่แต่ละฐานสะท้อนและเป้าหมายการฝึก</h3><ul>"
-    + htmlInterpretations + "</ul><h3>" + escapeHtml(action.title) + "</h3><p>"
-    + escapeHtml(action.summary) + "</p><ul>" + action.recommendations.map(function (item) {
-      return "<li>" + escapeHtml(item) + "</li>";
-    }).join("") + "</ul><p style=\"color:#7a6841\">เป็นค่าที่สำหรับการทดสอบอย่างง่ายเท่านั้น ไม่ใช่ค่าในการวินิจฉัย</p></div>";
+  const reportHtml = "<div class=\"report-header\"><div class=\"eyebrow\">RANGDEE · FITNESS ASSESSMENT</div>"
+    + "<h1>ผลประเมินสมรรถภาพเบื้องต้น</h1><p>" + escapeHtml(name)
+    + " · อายุ " + escapeHtml(valueFor("Age")) + " ปี · " + escapeHtml(valueFor("Gender")) + "</p></div>"
+    + "<table class=\"panels\"><tr><td class=\"panel chart-panel\"><h2>ภาพรวมสมรรถภาพ</h2>"
+    + "<p>ระดับสีตามเกณฑ์ค่า Cut-off</p><div class=\"radar\">" + buildRadarSvg(payload) + "</div>"
+    + "<div class=\"legend\"><span class=\"red-dot\"></span>แดง · ควรเริ่มเสริม&nbsp;&nbsp; "
+    + "<span class=\"yellow-dot\"></span>เหลือง · พอใช้/พัฒนาได้&nbsp;&nbsp; "
+    + "<span class=\"green-dot\"></span>เขียว · ดี</div></td>"
+    + "<td class=\"panel advice-panel\"><h2>แนวทางพัฒนาต่อ</h2><p>แนวทางตามจำนวนผลสีแดง เหลือง และเขียว ตามเกณฑ์การแปลผล</p>"
+    + "<div class=\"action\"><h3>" + escapeHtml(action.title) + "</h3><p>"
+    + escapeHtml(action.summary) + "</p><ul>" + actionItems + "</ul></div></td></tr></table>"
+    + "<h2 class=\"breakdown-title\">ผลรายฐาน</h2><table class=\"breakdown\"><tbody>" + htmlBreakdown
+    + "</tbody></table><p class=\"disclaimer\">เป็นค่าที่สำหรับการทดสอบอย่างง่ายเท่านั้น ไม่ใช่ค่าในการวินิจฉัย</p>";
   const pdfHtml = "<!doctype html><html><head><meta charset=\"UTF-8\"><style>"
-    + "body{font:12px Arial,sans-serif;color:#173c34;line-height:1.55;margin:28px}"
-    + "h2{font-size:20px}h3{font-size:15px;margin-top:22px}"
-    + "table{width:100%;border-collapse:collapse;margin:14px 0}"
-    + "th{background:#edf2e5;text-align:left}th,td{padding:8px;border:1px solid #dfe5dc;vertical-align:top}"
-    + "li{margin:0 0 8px}.disclaimer{margin-top:22px;color:#7a6841;font-weight:bold}"
-    + "</style></head><body>" + htmlBody + "</body></html>";
+    + "body{font:10px Arial,sans-serif;color:#173c34;line-height:1.55;margin:24px}"
+    + ".report-header{border-bottom:1px solid #e6e9e2;padding-bottom:10px;margin-bottom:12px}.eyebrow{font-size:8px;letter-spacing:1.4px;color:#788678;font-weight:bold}"
+    + "h1{font-size:21px;margin:6px 0 2px}h2{font-size:13px;margin:0 0 4px}h3{font-size:12px;margin:0 0 6px}.report-header p,.panel>p{margin:0;color:#78827b;font-size:9px}"
+    + ".panels{width:100%;border-collapse:separate;border-spacing:8px 0;margin:0 -8px 13px}.panels td{width:50%;vertical-align:top}"
+    + ".panel{padding:13px;border:1px solid #e6e9e2;border-radius:8px;background:#fff}.chart-panel{height:245px}.radar{height:185px;text-align:center}.radar svg{width:100%;height:185px}"
+    + ".legend{font-size:7px;color:#78827b;text-align:center}.legend span{display:inline-block;width:7px;height:7px;border-radius:50%}.red-dot{background:#df706a}.yellow-dot{background:#e6bd52}.green-dot{background:#63a879}"
+    + ".action{margin-top:13px;padding:12px;border-radius:7px;background:#f7f8f3}.action p,.action li{font-size:9px;color:#78827b}.action ul{padding-left:16px;margin:6px 0 0}.action li{margin-bottom:5px}"
+    + ".breakdown-title{margin:15px 0 5px}.breakdown{width:100%;border-collapse:collapse}.breakdown td{padding:8px 5px;border-top:1px solid #e6e9e2;vertical-align:top;font-size:8.5px}.breakdown .score{width:28px;text-align:center;font-weight:bold;color:#69825d}.grade{color:#78827b;margin:2px 0}.breakdown div{margin-top:2px}.disclaimer{margin-top:12px;color:#7a6841;font-weight:bold;font-size:8px}"
+    + "</style></head><body>" + reportHtml + "</body></html>";
+  const htmlBody = "<div style=\"font:13px Arial,sans-serif;color:#173c34;line-height:1.6\">"
+    + "<h2>ผลประเมินสมรรถภาพเบื้องต้น</h2><p>สวัสดี " + escapeHtml(name)
+    + " รายงานฉบับเต็มอยู่ในไฟล์ PDF ที่แนบมากับอีเมลนี้</p><p>บันทึก PDF ใน Google Drive โฟลเดอร์ที่กำหนดแล้ว</p></div>";
   const fileName = "Fitness-Assessment-" + sanitizeFileName(name)
     + "-" + valueFor("Record ID") + ".pdf";
   const pdfBlob = HtmlService.createHtmlOutput(pdfHtml)
     .getBlob()
     .getAs(MimeType.PDF)
     .setName(fileName);
-  const driveFile = getOrCreateAssessmentFolder().createFile(pdfBlob);
+  const driveFile = getFitnessFolder().createFile(pdfBlob);
   MailApp.sendEmail({
     to: email,
     subject: subject,
     body: textBody + "\n\nบันทึกไฟล์ PDF ไว้ใน Google Drive โฟลเดอร์ "
-      + CONFIG.driveFolderName + " และแนบไฟล์รายงานมาพร้อมอีเมลนี้แล้ว",
+      + CONFIG.fitnessFolderId + " และแนบไฟล์รายงานมาพร้อมอีเมลนี้แล้ว",
     htmlBody: htmlBody,
     attachments: [driveFile.getBlob()],
   });
 }
 
-function getOrCreateAssessmentFolder() {
-  const folders = DriveApp.getFoldersByName(CONFIG.driveFolderName);
-  return folders.hasNext() ? folders.next() : DriveApp.createFolder(CONFIG.driveFolderName);
+function getDrySlopeFolder() {
+  return DriveApp.getFolderById(CONFIG.drySlopeFolderId);
+}
+
+function getFitnessFolder() {
+  return DriveApp.getFolderById(CONFIG.fitnessFolderId);
+}
+
+function createDrySlopeAgreementPdf(profile, recordId) {
+  const clauses = [
+    {
+      title: "ความปลอดภัยเป็นสิ่งสำคัญสูงสุด",
+      items: [
+        "ใช้สถานที่ด้วยความระมัดระวัง คำนึงถึงความปลอดภัยของตนเองและผู้อื่นอยู่เสมอ",
+        "สวมใส่อุปกรณ์ป้องกันที่เหมาะสมครบถ้วน เช่น หมวกกันกระแทก สนับเข่า สนับศอก และอุปกรณ์ที่สนามกำหนด",
+        "ประเมินความพร้อมของร่างกายและสภาพอุปกรณ์ก่อนใช้งานทุกครั้ง",
+      ],
+    },
+    {
+      title: "ความรับผิดชอบต่อการกระทำของตนเอง",
+      items: [
+        "ท่านยอมรับว่าการเล่นสกีและสโนว์บอร์ดมีความเสี่ยงโดยธรรมชาติ",
+        "รับผิดชอบต่อสวัสดิภาพและความปลอดภัยของตนเองตลอดระยะเวลาที่ใช้สนาม",
+        "รับผิดชอบต่อความเสียหายหรือผลกระทบใด ๆ ที่เกิดขึ้นกับผู้อื่น อันเนื่องมาจากการกระทำโดยประมาทหรือไม่ปฏิบัติตามกฎของสนาม",
+      ],
+    },
+    {
+      title: "การปฏิบัติตามกฎระเบียบของสนามอย่างเคร่งครัด",
+      items: [
+        "ปฏิบัติตามกฎ ข้อบังคับ และคำแนะนำของเจ้าหน้าที่ทุกประการ",
+        "ใช้สนามตามช่วงเวลาที่ได้ทำการจองเท่านั้น",
+        "หยุดใช้งานทันทีเมื่อเจ้าหน้าที่เห็นว่าเกิดความเสี่ยงหรือสถานการณ์ไม่ปลอดภัย",
+      ],
+    },
+    {
+      title: "มารยาทในการใช้สถานที่ร่วมกับผู้อื่น",
+      items: [
+        "ให้ความเคารพสิทธิ์ของผู้ใช้งานท่านอื่น",
+        "หลีกเลี่ยงพฤติกรรมที่อาจก่อให้เกิดอันตราย รบกวน หรือสร้างความเดือดร้อนแก่ผู้อื่น",
+        "รักษาระยะห่างที่ปลอดภัยระหว่างการฝึกซ้อม",
+      ],
+    },
+    {
+      title: "การดูแลรักษาทรัพย์สินและสถานที่",
+      items: [
+        "ดูแลรักษาอุปกรณ์ สิ่งของ และทรัพย์สินของสนามเสมือนเป็นทรัพย์สินของตนเอง",
+        "ห้ามกระทำการใด ๆ ที่ก่อให้เกิดความเสียหายต่อพื้นผิว Dry Slope อุปกรณ์ หรือสิ่งปลูกสร้าง",
+        "รักษาความสะอาดและความเรียบร้อยของสถานที่",
+      ],
+    },
+    {
+      title: "สภาพร่างกายและพฤติกรรมที่เหมาะสม",
+      items: [
+        "งดใช้สนามหากอยู่ในสภาพร่างกายไม่พร้อม เช่น อ่อนเพลีย บาดเจ็บ หรือเจ็บป่วย",
+        "ห้ามใช้สนามขณะอยู่ภายใต้ฤทธิ์แอลกอฮอล์ ยาเสพติด หรือสารที่มีผลต่อการควบคุมสติ",
+      ],
+    },
+    {
+      title: "สิทธิ์ของสนามในการระงับการใช้งาน",
+      items: [
+        "สนามขอสงวนสิทธิ์ในการเพิกถอนสิทธิ์สมาชิก หรือระงับการใช้งานทันที หากพบว่ามีการฝ่าฝืนกฎ หรือมีพฤติกรรมที่เสี่ยงต่อความปลอดภัย",
+        "การตัดสินใจของเจ้าหน้าที่ถือเป็นที่สิ้นสุด",
+      ],
+    },
+  ];
+  const clauseHtml = clauses.map(function (clause, index) {
+    return "<section><h2>" + (index + 1) + ". " + escapeHtml(clause.title) + "</h2><ul>"
+      + clause.items.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join("")
+      + "</ul></section>";
+  }).join("");
+  const html = "<!doctype html><html><head><meta charset=\"UTF-8\"><style>"
+    + "body{font:12px Arial,sans-serif;color:#173c34;line-height:1.65;margin:32px}"
+    + "h1{font-size:21px;margin:6px 0 15px}h2{font-size:14px;margin:14px 0 5px}"
+    + ".profile{padding:10px 12px;border:1px solid #dfe5dc;background:#f7f8f3}"
+    + ".profile p{margin:3px 0}ul{margin:4px 0;padding-left:22px}li{margin:0 0 4px}"
+    + ".accept{margin-top:16px;padding:12px;border-top:1px solid #dfe5dc;font-weight:bold}"
+    + ".signature{margin-top:28px;padding-top:10px;border-top:1px solid #dfe5dc}"
+    + "</style></head><body><div style=\"font-size:9px;letter-spacing:1px;color:#788678\">RANGDEE · DRY SLOPE</div>"
+    + "<h1>ข้อตกลงและเงื่อนไขสำหรับสมาชิกผู้ผ่านการฝึกทักษะการใช้งาน Dry Slope อย่างปลอดภัย</h1>"
+    + "<div class=\"profile\"><p><b>ชื่อ:</b> " + escapeHtml(profile.name) + "</p>"
+    + "<p><b>เพศ:</b> " + escapeHtml(profile.gender) + " &nbsp; <b>อายุ:</b> " + escapeHtml(profile.age)
+    + " ปี &nbsp; <b>น้ำหนัก:</b> " + escapeHtml(profile.weight) + " กก. &nbsp; <b>ส่วนสูง:</b> "
+    + escapeHtml(profile.height) + " ซม.</p><p><b>โทรศัพท์:</b> " + escapeHtml(profile.phone)
+    + " &nbsp; <b>อีเมล:</b> " + escapeHtml(profile.email) + "</p></div>"
+    + "<p>ภายหลังจากที่ท่านได้ผ่านการฝึกทักษะการใช้งาน Dry Slope ตามมาตรฐานความปลอดภัยของสนามเรียบร้อยแล้ว ท่านจะได้รับสติ๊กเกอร์รับรองสถานะสมาชิก และสิทธิ์ในการจองเวลาเข้าใช้งานสนามเพื่อฝึกซ้อมด้วยตนเอง โดยไม่จำเป็นต้องมีผู้สอนดูแลตลอดเวลา</p>"
+    + "<p>การใช้สิทธิ์ดังกล่าว ท่านยินยอมและตกลงปฏิบัติตามข้อกำหนดต่อไปนี้อย่างเคร่งครัด</p>"
+    + clauseHtml
+    + "<p>การได้รับสิทธิ์เข้าใช้งานสนามด้วยตนเองนี้ ถือเป็นความไว้วางใจที่สนามมอบให้แก่ท่านในฐานะสมาชิกที่มีความรู้ ความเข้าใจ และมีวินัยด้านความปลอดภัยอย่างเพียงพอ จึงขอความร่วมมือจากท่านในการปฏิบัติตามข้อกำหนดดังกล่าวอย่างเคร่งครัด เพื่อความปลอดภัยและประสบการณ์ที่ดีของผู้ใช้งานทุกท่านร่วมกัน</p>"
+    + "<p class=\"accept\">ผู้ยื่นแบบฟอร์มได้อ่าน เข้าใจ และยอมรับข้อกำหนดการใช้ Dry Slope</p>"
+    + "<p class=\"signature\">บันทึกการยอมรับทางอิเล็กทรอนิกส์ · " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss")
+    + " · Record ID: " + escapeHtml(recordId) + "</p></body></html>";
+  const fileName = "Dry-Slope-Agreement-" + sanitizeFileName(profile.name)
+    + "-" + recordId + ".pdf";
+  const pdfBlob = HtmlService.createHtmlOutput(html)
+    .getBlob()
+    .getAs(MimeType.PDF)
+    .setName(fileName);
+  return getDrySlopeFolder().createFile(pdfBlob);
+}
+
+function sendDrySlopeAgreementEmail(profile, pdfFile) {
+  const email = requiredText(profile.email, 254);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Email address is invalid.");
+  }
+  const name = requiredText(profile.name, 60).replace(/^'/, "");
+
+  MailApp.sendEmail({
+    to: email,
+    subject: "สำเนาข้อตกลงการใช้ Dry Slope - " + name.replace(/[\r\n]/g, " "),
+    body: [
+      "สวัสดี " + name,
+      "",
+      "แนบมาพร้อมอีเมลนี้คือ PDF สำเนาข้อตกลงการใช้ Dry Slope ที่คุณยืนยันแล้ว",
+      "กรุณาเก็บไฟล์นี้ไว้เป็นหลักฐานการยอมรับข้อตกลง",
+    ].join("\n"),
+    attachments: [pdfFile.getBlob()],
+  });
+}
+
+function buildRadarSvg(payload) {
+  const centerX = 180;
+  const centerY = 112;
+  const radius = 65;
+  const levels = [
+    payload.results.reach && payload.results.reach.level,
+    payload.results["dead-hang"] && payload.results["dead-hang"].level,
+    payload.results["sit-stand"] && payload.results["sit-stand"].level,
+    payload.results["vertical-jump"] && payload.results["vertical-jump"].level,
+  ].map(function (level) {
+    return Math.max(0, Math.min(3, Number(level) || 0));
+  });
+  const point = function (index, scale) {
+    const angle = -Math.PI / 2 + index * Math.PI / 2;
+    return [
+      centerX + Math.cos(angle) * radius * scale,
+      centerY + Math.sin(angle) * radius * scale,
+    ];
+  };
+  const polygon = function (scale) {
+    return [0, 1, 2, 3].map(function (index) {
+      return point(index, scale).map(function (coordinate) {
+        return coordinate.toFixed(1);
+      }).join(",");
+    }).join(" ");
+  };
+  const resultPoints = levels.map(function (level, index) {
+    return point(index, level / 3).map(function (coordinate) {
+      return coordinate.toFixed(1);
+    }).join(",");
+  }).join(" ");
+  const labels = [
+    "<text x=\"180\" y=\"20\" text-anchor=\"middle\">Forward reach</text>",
+    "<text x=\"264\" y=\"115\" text-anchor=\"start\">Dead hang</text>",
+    "<text x=\"180\" y=\"218\" text-anchor=\"middle\">Sit-to-stand</text>",
+    "<text x=\"96\" y=\"115\" text-anchor=\"end\">Vertical jump</text>",
+  ].join("");
+  const dots = levels.map(function (level, index) {
+    if (!level) return "";
+    const coordinates = point(index, level / 3);
+    return "<circle cx=\"" + coordinates[0].toFixed(1) + "\" cy=\""
+      + coordinates[1].toFixed(1) + "\" r=\"4\" fill=\"#fff\" stroke=\"#4f8d62\" stroke-width=\"2\"/>";
+  }).join("");
+  return "<svg viewBox=\"0 0 360 235\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"กราฟระดับสมรรถภาพ 4 ฐาน\">"
+    + [1, 2, 3].map(function (level) {
+      return "<polygon points=\"" + polygon(level / 3) + "\" fill=\"none\" stroke=\"#e6eae2\"/>";
+    }).join("")
+    + [0, 1, 2, 3].map(function (index) {
+      const end = point(index, 1);
+      return "<line x1=\"" + centerX + "\" y1=\"" + centerY + "\" x2=\""
+        + end[0].toFixed(1) + "\" y2=\"" + end[1].toFixed(1) + "\" stroke=\"#e6eae2\"/>";
+    }).join("")
+    + "<polygon points=\"" + resultPoints + "\" fill=\"#93b983\" fill-opacity=\".29\" stroke=\"#4f8d62\" stroke-width=\"2\"/>"
+    + dots + "<g font-family=\"Arial,sans-serif\" font-size=\"11\" fill=\"#173c34\">" + labels + "</g></svg>";
 }
 
 function sanitizeFileName(value) {

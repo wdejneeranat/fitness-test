@@ -123,10 +123,10 @@ const resultsButton = document.querySelector("#results-button");
 function readState() {
   try {
     const saved = localStorage.getItem(storageKey);
-    return saved ? JSON.parse(saved) : { profile: null, results: {} };
+    return saved ? JSON.parse(saved) : { profile: null, profileDraft: null, results: {} };
   } catch (error) {
     console.error("Could not read saved assessment data.", error);
-    return { profile: null, results: {} };
+    return { profile: null, profileDraft: null, results: {} };
   }
 }
 
@@ -296,13 +296,13 @@ function updateProgress() {
 }
 
 function loadProfile() {
-  if (!state.profile) return;
-  Object.entries(state.profile).forEach(([name, value]) => {
+  const profile = { ...state.profile, ...state.profileDraft };
+  Object.entries(profile).forEach(([name, value]) => {
     if (name === "recordId" || name === "consented") return;
     const field = profileForm.elements.namedItem(name);
     if (field) field.value = value;
   });
-  profileForm.elements.namedItem("consented").checked = Boolean(state.profile.consented);
+  profileForm.elements.namedItem("consented").checked = Boolean(state.profile?.consented);
 }
 
 function validateProfile() {
@@ -329,6 +329,24 @@ function getProfileFormValues() {
   return values;
 }
 
+function saveProfileDraft() {
+  state.profileDraft = {
+    ...getProfileFormValues(),
+    recordId: state.profile?.recordId || state.profileDraft?.recordId,
+  };
+  saveState();
+}
+
+profileForm.addEventListener("input", saveProfileDraft);
+profileForm.addEventListener("change", saveProfileDraft);
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== storageKey) return;
+  state = readState();
+  loadProfile();
+  renderTests();
+});
+
 function hasUnsavedProfileChanges() {
   if (!state.profile) return true;
   const currentProfile = getProfileFormValues();
@@ -341,9 +359,10 @@ profileForm.addEventListener("submit", async (event) => {
   if (!validateProfile()) return;
   state.profile = {
     ...getProfileFormValues(),
-    recordId: state.profile?.recordId || createRecordId(),
+    recordId: state.profile?.recordId || state.profileDraft?.recordId || createRecordId(),
     consented: true,
   };
+  state.profileDraft = { ...state.profile };
   saveState();
   renderTests();
   await submitToSheet("profile");

@@ -1,17 +1,23 @@
-# Google Sheets setup
+# Google Sheets, Drive, and email setup
 
-The app asks for consent to save contact details and test results to Google Sheets, save a PDF assessment to Google Drive, and email the assessment to the participant. It sends profile data when the user selects **บันทึกข้อมูล**. When the participant selects **สร้าง PDF เก็บใน Drive และส่งอีเมล**, the script generates a PDF, stores it in the deploying account's Drive folder `verve_event` (creating the folder if needed), and emails the same PDF to the saved participant address. The email is sent from the Google account that deployed the Apps Script, not from a Hotmail address. Both stages use the same record ID, so results update the profile row instead of creating a second row. The sheet also records when consent was given. Deploy this script as a web app bound to the target spreadsheet.
+The app shares profile drafts between `dry-slope.html` and `assessment.html` in the same browser and on the same origin. Accepted Dry Slope agreements and assessment profiles/results are saved to the configured Google Sheet using the same record ID. The agreement form includes the current terms from the original Google Form and records the agreement version and timestamp.
 
-1. Open the target [Google Sheet](https://docs.google.com/spreadsheets/d/10v-weiEiAkpQte9R1AoNs-YgYaf_FupvWMuRh3qRsb0/edit).
+Dry Slope acceptance creates a PDF copy of the agreement, saves it in the [Dry Slope Drive folder](https://drive.google.com/drive/u/2/folders/1jyCtZ4mWK3pf6fpLv1tfwkXvICksb3Xm), and emails the participant with that PDF attached. The fitness assessment report is generated as a PDF with the radar chart, overall action guidance, and per-test breakdown shown in the attached report reference. It is saved in the [Fitness Test Drive folder](https://drive.google.com/drive/u/2/folders/1J0dOJnkD6HwMsSIVOfFL9LwecUYPkoep), and that same saved PDF is attached to the email sent to the participant.
+
+## Deploy the Apps Script
+
+1. Open the target [Google Sheet](https://docs.google.com/spreadsheets/d/1_km-l77IVk5IuCMVsFxIfa-56opsh8elOtNkEVFTrhw/edit?gid=0#gid=0).
 2. Select **Extensions → Apps Script** and replace the editor contents with `Code.gs`.
-3. Save. In the function selector next to **Run**, select `authorizeAssessmentPermissions` (not `doPost`) and click **Run**. Choose the Google account that should own the `verve_event` folder and send the emails, then review and allow Google Sheets, Google Drive, PDF generation, and email permissions. This creates `verve_event` in that account's Drive if it does not exist.
+3. Save. In the function selector next to **Run**, select `authorizeAssessmentPermissions` (not `doPost`) and click **Run**. Choose the Google account that has access to the target Drive folder and sends the emails. Review and allow Google Sheets, Google Drive, PDF generation, and email permissions.
 4. Select **Deploy → Manage deployments**. Edit the existing web app deployment, select **New version**, and deploy it before publishing the updated website. If you create a new deployment instead, copy its new URL into `config.js`.
 5. Set **Execute as** to the account that authorized the permissions and **Who has access** to **Anyone**.
 6. Confirm `config.js` contains the deployed web app URL ending in `/exec`.
-7. Publish the updated app on GitHub Pages.
+7. Publish the updated app.
 
-The script writes a header row when the selected tab is empty. Profile saves create or update one row; result saves find that row by its record ID, update its test columns, generate a PDF report, save it in the deploying account's `verve_event` Drive folder, and email the saved PDF as an attachment. File names include the participant name and record ID. New deployments add the Vertical Jump and Action Rule columns; old Board Jump columns are retained for existing data. The script does not return spreadsheet data to the browser. Browsers cannot read the response from this public Apps Script endpoint, so the app reports that the request was sent but cannot confirm the sheet write, Drive save, or email delivery.
+The script uses the existing Drive folders `1jyCtZ4mWK3pf6fpLv1tfwkXvICksb3Xm` for Dry Slope agreements and `1J0dOJnkD6HwMsSIVOfFL9LwecUYPkoep` for Fitness Test reports; it does not create other folders. The account executing the web app must have permission to add files to both folders. The sheet writes headers when empty and adds new agreement columns when needed. Profile/agreement saves update one row; accepted agreements create a PDF in the Dry Slope folder and email it as an attachment. Result saves locate that row by record ID, update test values, create the fitness report PDF in its folder, and email that saved file as an attachment.
 
-## Privacy and access
+The browser uses `no-cors` for the public Apps Script endpoint, so it cannot confirm the sheet write, Drive save, or email delivery. Verify those in Google Sheets, the target Drive folder, and the recipient's mailbox after deployment.
 
-Keep the spreadsheet and `verve_event` Drive folder private and share them only with authorized people. The web app deployment must accept unauthenticated submissions so visitors can submit results; anyone who obtains the deployment URL may attempt to add rows, create PDFs, and trigger emails from the deploying Google account. Do not put credentials or access tokens in `config.js`. The app requests consent before sending contact details, test results, saving the PDF, and sending the assessment email. Never put an email password in the app or Apps Script source.
+## Privacy and data sharing
+
+Profile drafts are stored in browser `localStorage` so the two functions can prefill one another. This only shares data between pages using the same browser profile and website origin; it does not synchronize across devices or browsers. Keep the spreadsheet and Drive folder private and share them only with authorized people. Anyone who obtains the public web app URL may attempt to submit data and trigger emails from the deploying Google account. Do not put credentials or access tokens in `config.js`.
