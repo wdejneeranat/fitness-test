@@ -32,6 +32,8 @@ button { cursor: pointer; }
 .button-outline:hover { background: white; }
 .button-primary { background: var(--green); color: white; }
 .button-primary:hover { background: #1d5e41; }
+.button-blue { background: #123f7a; color: white; }
+.button-blue:hover { background: #0d315f; }
 .button-dark { background: var(--ink); color: white; }
 .button-dark:hover { background: #24574a; }
 .hero { position: relative; display: grid; grid-template-columns: 1.04fr .96fr; align-items: center; max-width: 1180px; min-height: 438px; margin: auto; padding: 26px 20px 34px; overflow: hidden; }
